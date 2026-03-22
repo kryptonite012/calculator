@@ -1,0 +1,7 @@
+Calculator Pro is a modern, feature-rich web-based calculator designed to provide both basic and advanced mathematical operations within an intuitive and visually appealing interface. Built using HTML, CSS, and JavaScript, this application focuses on delivering a smooth user experience with responsive design, dynamic interactions, and persistent data storage.
+
+The calculator supports standard arithmetic operations such as addition, subtraction, multiplication, and division, along with advanced functionalities including square root, power calculations, percentage operations, and reciprocal values. It also includes memory functions like Memory Add (M+), Memory Subtract (M−), Memory Recall (MR), and Memory Clear (MC), enabling users to store and reuse values efficiently during complex calculations.
+
+A key highlight of the application is its interactive UI and animations, which enhance usability and engagement. Button clicks include visual feedback effects, while error handling—such as division by zero—triggers smooth animations to alert users without disrupting the experience. The calculator also features a calculation history panel, allowing users to view recent operations and reuse previous results instantly.
+
+The application incorporates a dark mode toggle, providing users with the flexibility to switch between light and dark themes based on their preference. This theme setting, along with calculation history and memory values, is stored using browser LocalStorage, ensuring data persistence across sessions.
