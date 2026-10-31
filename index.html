@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Advanced Calculator</title>
+    <meta name="description" content="Calculator Pro: arithmetic, square root, powers, memory, history, keyboard support and dark mode.">
+    <title>Calculator Pro</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🧮</text></svg>">
     <style>
         * {
             margin: 0;
@@ -415,12 +417,12 @@
         <div class="calculator-wrapper">
             <div class="header">
                 <div class="title">Calculator Pro</div>
-                <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">🌙</button>
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
             </div>
 
             <div class="display-section">
                 <div class="previous-operand" id="previousOperand"></div>
-                <div class="current-operand" id="currentOperand">0</div>
+                <div class="current-operand" id="currentOperand" aria-live="polite">0</div>
                 <div class="memory-display" id="memoryDisplay"></div>
             </div>
 
@@ -428,19 +430,19 @@
                 <button class="btn btn-clear" onclick="clearDisplay()">Clear</button>
                 <button class="btn btn-backspace" onclick="backspace()">⌫</button>
                 <button class="btn btn-function" onclick="toggleSign()">±</button>
-                <button class="btn btn-function" onclick="appendValue('%')">%</button>
+                <button class="btn btn-function" onclick="percent()" title="Percent">%</button>
                 <button class="btn btn-operator" onclick="appendOperator('/')">÷</button>
 
                 <button class="btn btn-number" onclick="appendValue('7')">7</button>
                 <button class="btn btn-number" onclick="appendValue('8')">8</button>
                 <button class="btn btn-number" onclick="appendValue('9')">9</button>
-                <button class="btn btn-function" onclick="appendValue('Math.sqrt')">√</button>
+                <button class="btn btn-function" onclick="squareRoot()" title="Square root">√</button>
                 <button class="btn btn-operator" onclick="appendOperator('*')">×</button>
 
                 <button class="btn btn-number" onclick="appendValue('4')">4</button>
                 <button class="btn btn-number" onclick="appendValue('5')">5</button>
                 <button class="btn btn-number" onclick="appendValue('6')">6</button>
-                <button class="btn btn-function" onclick="appendValue('Math.pow')">x²</button>
+                <button class="btn btn-function" onclick="square()" title="Square">x²</button>
                 <button class="btn btn-operator" onclick="appendOperator('-')">−</button>
 
                 <button class="btn btn-number" onclick="appendValue('1')">1</button>
@@ -477,35 +479,31 @@
         let memory = 0;
         let history = [];
         let isDarkMode = false;
+        let justEvaluated = false;   // next digit starts a new number after "=" or a function
 
         const currentDisplay = document.getElementById('currentOperand');
         const previousDisplay = document.getElementById('previousOperand');
         const memoryDisplay = document.getElementById('memoryDisplay');
         const historyList = document.getElementById('historyList');
+        const themeToggle = document.getElementById('themeToggle');
+        const SYMBOLS = { '+': '+', '-': '−', '*': '×', '/': '÷' };
 
-        // Load theme preference
-        if (localStorage.getItem('darkMode') === 'true') {
-            isDarkMode = true;
-            document.body.classList.add('dark-mode');
-            updateThemeToggle();
-        }
+        const store = {
+            get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+            set(k, v) { try { localStorage.setItem(k, v); } catch {} }
+        };
 
-        // Load history
-        if (localStorage.getItem('calculatorHistory')) {
-            history = JSON.parse(localStorage.getItem('calculatorHistory'));
-            updateHistoryDisplay();
-        }
-
-        // Load memory
-        if (localStorage.getItem('calculatorMemory')) {
-            memory = parseFloat(localStorage.getItem('calculatorMemory'));
-            updateMemoryDisplay();
-        }
+        function round(n) { return Math.round(n * 1e10) / 1e10; }
+        function current() { return parseFloat(currentOperand) || 0; }
 
         function appendValue(value) {
+            if (justEvaluated) { currentOperand = '0'; justEvaluated = false; }
             if (value === '.' && currentOperand.includes('.')) return;
-            if (currentOperand === '0' && value !== '.') {
+            if (currentOperand.replace(/[-.]/g, '').length >= 16) return;
+            if ((currentOperand === '0' || currentOperand === '') && value !== '.') {
                 currentOperand = value;
+            } else if (currentOperand === '' && value === '.') {
+                currentOperand = '0.';
             } else {
                 currentOperand += value;
             }
@@ -513,9 +511,10 @@
         }
 
         function appendOperator(op) {
-            if (currentOperand === '') return;
+            justEvaluated = false;
+            if (currentOperand === '' && previousOperand !== '') { operator = op; updateDisplay(); return; }
             if (previousOperand !== '') {
-                calculate();
+                if (!calculate()) return;
             }
             operator = op;
             previousOperand = currentOperand;
@@ -524,32 +523,56 @@
         }
 
         function calculate() {
-            if (!operator || previousOperand === '' || currentOperand === '') return;
-
-            let result;
+            if (!operator || previousOperand === '' || currentOperand === '') return false;
             const prev = parseFloat(previousOperand);
             const curr = parseFloat(currentOperand);
-
+            let result;
             switch (operator) {
                 case '+': result = prev + curr; break;
                 case '-': result = prev - curr; break;
                 case '*': result = prev * curr; break;
                 case '/':
-                    if (curr === 0) {
-                        showError('Cannot divide by zero');
-                        return;
-                    }
+                    if (curr === 0) { showError('Cannot divide by zero'); return false; }
                     result = prev / curr;
                     break;
-                case '%': result = prev % curr; break;
-                default: return;
+                default: return false;
             }
-
-            result = Math.round(result * 100000000) / 100000000;
-            addToHistory(`${prev} ${operator} ${curr} = ${result}`);
+            result = round(result);
+            addToHistory(`${prev} ${SYMBOLS[operator]} ${curr} = ${result}`);
             currentOperand = result.toString();
             operator = null;
             previousOperand = '';
+            justEvaluated = true;
+            updateDisplay();
+            return true;
+        }
+
+        // Apply a one-number function (√, x², 1/x, %) to the current value.
+        function applyUnary(label, fn) {
+            const value = current();
+            const result = fn(value);
+            if (result === null) return;
+            const rounded = round(result);
+            addToHistory(`${label(value)} = ${rounded}`);
+            currentOperand = rounded.toString();
+            justEvaluated = true;
+            updateDisplay();
+        }
+
+        function squareRoot() {
+            applyUnary(v => `√(${v})`, v => v < 0 ? (showError('Invalid input'), null) : Math.sqrt(v));
+        }
+        function square() { applyUnary(v => `(${v})²`, v => v * v); }
+        function reciprocal() {
+            applyUnary(v => `1/(${v})`, v => v === 0 ? (showError('Cannot divide by zero'), null) : 1 / v);
+        }
+        function percent() {
+            // "200 + 10 %" → 10% of 200; on its own, "50 %" → 0.5
+            if (operator && previousOperand !== '' && (operator === '+' || operator === '-')) {
+                currentOperand = round(parseFloat(previousOperand) * current() / 100).toString();
+            } else {
+                currentOperand = round(current() / 100).toString();
+            }
             updateDisplay();
         }
 
@@ -557,104 +580,110 @@
             currentOperand = '0';
             previousOperand = '';
             operator = null;
+            justEvaluated = false;
             updateDisplay();
         }
 
         function backspace() {
-            if (currentOperand.length === 1) {
-                currentOperand = '0';
-            } else {
-                currentOperand = currentOperand.slice(0, -1);
-            }
+            if (justEvaluated) { clearDisplay(); return; }
+            currentOperand = currentOperand.slice(0, -1);
+            if (currentOperand === '' || currentOperand === '-') currentOperand = operator ? '' : '0';
             updateDisplay();
         }
 
         function toggleSign() {
-            currentOperand = (parseFloat(currentOperand) * -1).toString();
+            if (currentOperand === '' || currentOperand === '0') return;
+            currentOperand = currentOperand.startsWith('-') ? currentOperand.slice(1) : '-' + currentOperand;
             updateDisplay();
         }
 
-        function reciprocal() {
-            const value = parseFloat(currentOperand);
-            if (value === 0) {
-                showError('Cannot divide by zero');
-                return;
-            }
-            currentOperand = (1 / value).toString();
-            updateDisplay();
+        function format(str) {
+            if (str === '' || str === '-') return str || '0';
+            const [int, dec] = str.split('.');
+            const n = Number(int);
+            if (!isFinite(n) || Math.abs(n) >= 1e16) return Number(str).toExponential(6);
+            const grouped = (int.startsWith('-') ? '-' : '') + Math.abs(n).toLocaleString('en-US');
+            return dec !== undefined ? `${grouped}.${dec}` : grouped;
         }
 
         function updateDisplay() {
-            currentDisplay.textContent = currentOperand || '0';
-            previousDisplay.textContent = operator ? `${previousOperand} ${operator}` : '';
+            currentDisplay.textContent = currentOperand === '' ? '0' : format(currentOperand);
+            previousDisplay.textContent = operator ? `${format(previousOperand)} ${SYMBOLS[operator]}` : '';
         }
 
         function addToHistory(entry) {
             history.unshift(entry);
             if (history.length > 10) history.pop();
-            localStorage.setItem('calculatorHistory', JSON.stringify(history));
+            store.set('calculatorHistory', JSON.stringify(history));
             updateHistoryDisplay();
         }
 
         function updateHistoryDisplay() {
+            historyList.replaceChildren();
             if (history.length === 0) {
-                historyList.innerHTML = '<div style="color: #999; font-size: 0.9em;">No calculations yet</div>';
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color: #999; font-size: 0.9em;';
+                empty.textContent = 'No calculations yet';
+                historyList.append(empty);
                 return;
             }
-            historyList.innerHTML = history.map((item, index) => 
-                `<div class="history-item" onclick="useHistory('${item}')">${item}</div>`
-            ).join('');
+            history.forEach(item => {
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.textContent = item;
+                div.title = 'Use this result';
+                div.addEventListener('click', () => useHistory(item));
+                historyList.append(div);
+            });
         }
 
         function useHistory(entry) {
-            const result = entry.split('=')[1].trim();
+            const result = entry.split('=').pop().trim();
             currentOperand = result;
-            operator = null;
-            previousOperand = '';
+            justEvaluated = true;
             updateDisplay();
         }
 
         function memoryAdd() {
-            memory += parseFloat(currentOperand) || 0;
-            localStorage.setItem('calculatorMemory', memory);
-            currentOperand = '0';
+            memory = round(memory + current());
+            store.set('calculatorMemory', memory);
+            justEvaluated = true;
             updateMemoryDisplay();
-            updateDisplay();
         }
 
         function memorySubtract() {
-            memory -= parseFloat(currentOperand) || 0;
-            localStorage.setItem('calculatorMemory', memory);
-            currentOperand = '0';
+            memory = round(memory - current());
+            store.set('calculatorMemory', memory);
+            justEvaluated = true;
             updateMemoryDisplay();
-            updateDisplay();
         }
 
         function memoryClear() {
             memory = 0;
-            localStorage.setItem('calculatorMemory', memory);
+            store.set('calculatorMemory', memory);
             updateMemoryDisplay();
         }
 
         function memoryRecall() {
             currentOperand = memory.toString();
+            justEvaluated = true;
             updateDisplay();
         }
 
         function updateMemoryDisplay() {
-            if (memory !== 0) {
-                memoryDisplay.textContent = `Memory: ${memory}`;
-                memoryDisplay.classList.add('active');
-            } else {
-                memoryDisplay.textContent = '';
-                memoryDisplay.classList.remove('active');
-            }
+            memoryDisplay.textContent = memory !== 0 ? `Memory: ${memory}` : '';
+            memoryDisplay.classList.toggle('active', memory !== 0);
+        }
+
+        function updateThemeToggle() {
+            themeToggle.textContent = isDarkMode ? '☀️' : '🌙';
         }
 
         function toggleTheme() {
             isDarkMode = !isDarkMode;
-            document.body.classList.toggle('dark-mode');
-            localStorage.setItem('darkMode', isDarkMode);
+            document.body.classList.toggle('dark-mode', isDarkMode);
+            store.set('darkMode', isDarkMode);
+            updateThemeToggle();
         }
 
         function showError(message) {
@@ -663,9 +692,31 @@
             setTimeout(() => {
                 currentDisplay.parentElement.classList.remove('error');
                 clearDisplay();
-            }, 2000);
+            }, 1500);
         }
 
+        // Keyboard support
+        document.addEventListener('keydown', e => {
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            const k = e.key;
+            if (/^[0-9.]$/.test(k)) appendValue(k);
+            else if (['+', '-', '*', '/'].includes(k)) appendOperator(k);
+            else if (k === 'Enter' || k === '=') calculate();
+            else if (k === 'Backspace') backspace();
+            else if (k === 'Escape' || k === 'Delete') clearDisplay();
+            else if (k === '%') percent();
+            else return;
+            e.preventDefault();
+        });
+
+        // Restore saved state
+        isDarkMode = store.get('darkMode') === 'true';
+        document.body.classList.toggle('dark-mode', isDarkMode);
+        updateThemeToggle();
+        try { history = JSON.parse(store.get('calculatorHistory')) || []; } catch { history = []; }
+        memory = parseFloat(store.get('calculatorMemory')) || 0;
+
+        updateHistoryDisplay();
         updateDisplay();
         updateMemoryDisplay();
     </script>
